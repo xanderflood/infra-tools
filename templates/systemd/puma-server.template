@@ -1,30 +1,27 @@
 [Unit]
-Description=Puma HTTP Server - {{{ServiceName}}}/{{{ProcessName}}}
+Description=Puma HTTP Server - {{{service_name}}}/{{{process_name}}}
 After=network.target
 
 # Uncomment for socket activation (see below)
-Requires=puma-{{{ServiceName}}}_{{{ProcessName}}}.socket
+# Requires=puma-{{{service_name}}}.{{{process_name}}}.socket
 
 [Service]
 # Foreground process (do not use --daemon in ExecStart or config.rb)
 Type=simple
 
 # Preferably configure a non-privileged user
-# User=
+# User={{{service_name}}}
 
 # The path to the puma application root
-WorkingDirectory=/home/ubuntu/{{{ServiceName}}}
+WorkingDirectory=/home/ubuntu/{{{service_name}}}
 
 # Helpful for debugging socket activation, etc.
 # Environment=PUMA_DEBUG=1
 
 # The command to start Puma. This variant uses a binstub generated via
 # `bundle binstubs puma --path ./sbin` in the WorkingDirectory
-ExecStart=/home/ubuntu/{{{ServiceName}}}/script/proc/{{{ProcessName}}}
-# bundle exec puma -b tcp://localhost:9292 -b ssl://localhost:9293?key=key.pem&cert=cert.pem
+ExecStart=/home/ubuntu/{{{service_name}}}/script/proc/{{{process_name}}}
 
-# Variant: Use config file with `bind` directives instead:
-# ExecStart=WorkingDirectory=/home/ubuntu/{{{ServiceName}}}/sbin/puma -C config.rb
 # Variant: Use `bundle exec --keep-file-descriptors puma` instead of binstub
 
 Restart=always
