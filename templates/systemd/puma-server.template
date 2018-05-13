@@ -13,7 +13,6 @@ Type=simple
 # User=
 
 # The path to the puma application root
-# Also replace the "<WD>" place holders below with this path.
 WorkingDirectory=/home/ubuntu/{{{ServiceName}}}
 
 # Helpful for debugging socket activation, etc.
@@ -21,12 +20,11 @@ WorkingDirectory=/home/ubuntu/{{{ServiceName}}}
 
 # The command to start Puma. This variant uses a binstub generated via
 # `bundle binstubs puma --path ./sbin` in the WorkingDirectory
-# (replace "<WD>" below)
 ExecStart=/home/ubuntu/{{{ServiceName}}}/script/proc/{{{ProcessName}}}
 # bundle exec puma -b tcp://localhost:9292 -b ssl://localhost:9293?key=key.pem&cert=cert.pem
 
 # Variant: Use config file with `bind` directives instead:
-# ExecStart=<WD>/sbin/puma -C config.rb
+# ExecStart=WorkingDirectory=/home/ubuntu/{{{ServiceName}}}/sbin/puma -C config.rb
 # Variant: Use `bundle exec --keep-file-descriptors puma` instead of binstub
 
 Restart=always
