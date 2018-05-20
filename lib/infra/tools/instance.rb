@@ -1,8 +1,5 @@
 require "yaml"
 
-require "net/ssh"
-require "net/scp"
-
 require "aws-sdk-ec2"
 
 require_relative "key"
@@ -76,11 +73,21 @@ module Infra::Tools
     end
 
     def with_shell &block
-      with_connection(Net::SSH, &block)
+      cxn = Connection::SSH.new(
+        ipv4:     public_ip,
+        username: username,
+        key_file: key_file)
+
+      cxn.do(&block)
     end
 
     def with_filesystem &block
-      with_connection(Net::SCP, &block)
+      cxn = Connection::SCP.new(
+        ipv4:     public_ip,
+        username: username,
+        key_file: key_file)
+
+      cxn.do(&block)
     end
 
     def upload_file local, remote
@@ -100,13 +107,6 @@ module Infra::Tools
       end
 
       keys
-    end
-
-    def with_connection klass, &block
-      klass.start(
-        public_ip, username,
-        keys: [key_file],
-        &block)
     end
 
     def aws_instance # may lead to outdated state information
