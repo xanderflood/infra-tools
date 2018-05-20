@@ -8,6 +8,6 @@ module Infra
   end
 end
 
-%w(key instance template).each do |name|
+%w(key instance template service).each do |name|
   require_relative "tools/#{name}"
 end
