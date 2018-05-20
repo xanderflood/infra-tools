@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+
+require "pry"
+require "infra/tools"
+
+NAME = ARGV.shift
+PRY_CONFIG = {
+  prompt: [
+    proc do |obj, _, _|
+      desc = (
+        [NAME] + obj.contexts.map(&:name)
+      ).join("-")
+
+      "#{desc}> "
+    end,
+    proc { |obj, _, _| "> " },
+  ]
+}
+
+# add a wrapper for via that opens a new pry
+class Infra::Tools::Connection::SSH::DSL
+  def with(*cxts)
+    self.via(*cxts) do |shell|
+      start(shell)
+    end
+    true
+  end
+end
+
+def start(shell)
+  Pry.start(shell, PRY_CONFIG)
+end
+
+#####
+
+Context = Infra::Tools::Connection::Context
+include Context
+
+Infra::Tools::Instance.find(NAME).with_shell do |shell|
+  start(shell)
+end
