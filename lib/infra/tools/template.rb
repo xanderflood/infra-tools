@@ -1,7 +1,8 @@
 module Infra::Tools
   class Template
     def self.template_path *keys
-      File.join("templates", *keys)
+      f = File.join("templates", *keys)
+      "#{f}.template"
     end
 
     def self.from_keys path, substitutions, *keys
@@ -22,7 +23,7 @@ module Infra::Tools
 
       result = @template
       substitutions.each do |k, v|
-        result = result.gsub("{{{#{k}}}}", v)
+        result = result.gsub("{{{#{k}}}}", v.to_s)
       end
 
       @ostream.write(result)
