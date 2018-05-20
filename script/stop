@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+
+require 'infra/tools'
+
+TYPE = ARGV.shift
+NAME = ARGV.shift
+
+if TYPE == "instance"
+  i = Infra::Tools::Instance.find(NAME)
+  i.stop
+
+  puts "name: #{NAME}"
+  puts "instance_id: #{i.instance_id}"
+
+  print "stopping"
+  until (status = i.status) == "stopped"
+    print "."
+    sleep(1)
+  end
+  print "\n"
+  puts "stopped"
+else
+  fail("invalid type: #{TYPE}")
+end
