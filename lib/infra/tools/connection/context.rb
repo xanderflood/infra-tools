@@ -14,13 +14,15 @@ module Infra::Tools::Connection
     # def format command; end
 
     class Base
+      attr_accessor :override_name
+
       # should be overridden, but this is a reasonable default
       def description
         self.to_s
       end
 
       def name
-        self.class.name.split("::").last
+        override_name || self.class.name.split("::").last
       end
 
       private
@@ -140,11 +142,14 @@ module Infra::Tools::Connection
     # applies the current envar AWS config to the remote shell
     class AWS < Base
       def self.[]
-        WithEnvHash[
+        w = WithEnvHash[
           AWS_DEFAULT_REGION:    ENV["AWS_DEFAULT_REGION"],
           AWS_SECRET_ACCESS_KEY: ENV["AWS_SECRET_ACCESS_KEY"],
           AWS_ACCESS_KEY_ID:     ENV["AWS_ACCESS_KEY_ID"],
         ]
+        
+        w.override_name = "AWS"
+        w
       end
     end
   end
