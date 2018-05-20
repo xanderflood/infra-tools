@@ -1,9 +1,9 @@
 require 'shellwords'
 
 module Infra::Tools::Connection
-  class Context
+  module Context
     def self.apply(command, *contexts)
-      contexts.each do |c|
+      contexts.reverse.each do |c|
         command = c.format(command)
       end
 
@@ -13,8 +13,30 @@ module Infra::Tools::Connection
     # subclasses must define
     # def format command; end
 
+    class Base
+      # should be overridden, but this is a reasonable default
+      def description
+        self.to_s
+      end
+
+      def name
+        self.class.name.split("::").last
+      end
+
+      private
+      def initialize params={}
+        params.each do |k, v|
+          self.send("#{k}=", v)
+        end
+      end
+
+      def escape str
+        Shellwords.escape(str)
+      end
+    end
+
     # execute in the default context
-    class Default < Context
+    class Default < Base
       def self.[]; self.new; end
 
       def format command
@@ -23,14 +45,14 @@ module Infra::Tools::Connection
     end
 
     # execute as root
-    class Sudo < Context
+    class Sudo < Base
       def self.[]; self.new; end
 
       def format command; "sudo #{command}"; end
     end
 
     # execute as another user
-    class SudoSu < Context
+    class SudoSu < Base
       attr_accessor :username
 
       # if username is nil, this is a simple sudo
@@ -42,14 +64,14 @@ module Infra::Tools::Connection
     end
 
     # execute in a bundler context
-    class Bash < Context
+    class Bash < Base
       def self.[]; self.new; end
 
       def format command; "bash -c #{escape(command)}"; end
     end
 
     # execute with envars loaded from a hash
-    class WithEnvHash < Context
+    class WithEnvHash < Base
       attr_accessor :env
 
       def self.[](env); self.new(env: env); end
@@ -66,7 +88,7 @@ module Infra::Tools::Connection
     end
 
     # execute in a bundler context
-    class WithEnvFile < Context
+    class WithEnvFile < Base
       attr_accessor :path
 
       def self.[](path); self.new(path: path); end
@@ -77,7 +99,7 @@ module Infra::Tools::Connection
     end
 
     # execute in a bundler context
-    class In < Context
+    class In < Base
       attr_accessor :path
 
       def self.[](path); self.new(path: path); end
@@ -88,14 +110,14 @@ module Infra::Tools::Connection
     end
 
     # execute in a bundler context
-    class Bundler < Context
-      def self.[]; self.new(path: path); end
+    class Bundled < Base
+      def self.[]; self.new(); end
 
       def format command; "bundle exec #{command}"; end
     end
 
     # execute in a bundler context
-    class RVM < Context
+    class RVM < Base
       attr_accessor :rvm_path, :ruby, :gemset
 
       RVM_PATH = "/usr/share/rvm/bin/rvm"
@@ -116,7 +138,7 @@ module Infra::Tools::Connection
     end
 
     # applies the current envar AWS config to the remote shell
-    class AWS < Context
+    class AWS < Base
       def self.[]
         WithEnvHash[
           AWS_DEFAULT_REGION:    ENV["AWS_DEFAULT_REGION"],
@@ -124,17 +146,6 @@ module Infra::Tools::Connection
           AWS_ACCESS_KEY_ID:     ENV["AWS_ACCESS_KEY_ID"],
         ]
       end
-    end
-
-    private
-    def initialize params={}
-      params.each do |k, v|
-        self.send("#{k}=", v)
-      end
-    end
-
-    def escape str
-      Shellwords.escape(str)
     end
   end
 end
