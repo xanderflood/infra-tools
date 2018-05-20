@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
-require 'infra/tools'
+require "bundler/setup"
+require "infra/tools"
 
 TYPE = ARGV.shift
 NAME = ARGV.shift
