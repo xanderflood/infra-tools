@@ -10,7 +10,9 @@ After=network.target
 Type=simple
 
 # Preferably configure a non-privileged user
-# User={{{service_name}}}
+User=ubuntu
+# TODO
+#User={{{service_name}}}
 
 # The path to the puma application root
 WorkingDirectory=/home/ubuntu/{{{service_name}}}
@@ -20,7 +22,7 @@ WorkingDirectory=/home/ubuntu/{{{service_name}}}
 
 # The command to start Puma. This variant uses a binstub generated via
 # `bundle binstubs puma --path ./sbin` in the WorkingDirectory
-ExecStart=/home/ubuntu/{{{service_name}}}/script/proc/{{{process_name}}}
+ExecStart=/usr/share/rvm/bin/rvm 2.4@{{{service_name}}} do /home/ubuntu/{{{service_name}}}/bin/{{{process_name}}}
 
 # Variant: Use `bundle exec --keep-file-descriptors puma` instead of binstub
 
