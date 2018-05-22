@@ -14,11 +14,11 @@ module Infra::Tools::Connection
     # def format command; end
 
     class Base
-      attr_accessor :override_name
+      attr_accessor :override_name, :override_desc
 
       # should be overridden, but this is a reasonable default
       def description
-        self.to_s
+        override_desc || self.to_s
       end
 
       def name
@@ -51,6 +51,10 @@ module Infra::Tools::Connection
       def self.[]; self.new; end
 
       def format command; "sudo #{command}"; end
+
+      def description
+        "as superuser"
+      end
     end
 
     # execute as another user
@@ -63,6 +67,10 @@ module Infra::Tools::Connection
       def format command
         "sudo su #{username} -c #{escape(command)}"
       end
+
+      def description
+        "as user #{username}"
+      end
     end
 
     # execute in a bundler context
@@ -70,6 +78,10 @@ module Infra::Tools::Connection
       def self.[]; self.new; end
 
       def format command; "bash -c #{escape(command)}"; end
+
+      def description
+        "in a bash session"
+      end
     end
 
     # execute with envars loaded from a hash
@@ -87,6 +99,10 @@ module Infra::Tools::Connection
       def format command
         "#{env_string} #{command}"
       end
+
+      def description
+        "with #{env_string}"
+      end
     end
 
     # execute in a bundler context
@@ -97,6 +113,10 @@ module Infra::Tools::Connection
       
       def format command
         "source #{escape(path)} && #{command}"
+      end
+
+      def description
+        "sourcing #{path}"
       end
     end
 
@@ -109,6 +129,10 @@ module Infra::Tools::Connection
       def format command
         "cd #{escape(path)} && #{command}"
       end
+
+      def description
+        "in #{path}"
+      end
     end
 
     # execute in a bundler context
@@ -116,6 +140,10 @@ module Infra::Tools::Connection
       def self.[]; self.new(); end
 
       def format command; "bundle exec #{command}"; end
+
+      def description
+        "bundled"
+      end
     end
 
     # execute in a bundler context
@@ -149,6 +177,7 @@ module Infra::Tools::Connection
         ]
         
         w.override_name = "AWS"
+        w.override_desc = "AWS(local)"
         w
       end
     end
