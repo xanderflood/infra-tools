@@ -16,7 +16,11 @@ PRY_CONFIG = {
       "#{desc}> "
     end,
     proc { |obj, _, _| "> " },
-  ]
+  ],
+  exception_handler: proc do |output, exception, _|
+    output.puts "#{exception.class}: #{exception.message}"
+    exception.backtrace.each { |line| output.puts(line) }
+  end,
 }
 
 # add a wrapper for via that opens a new pry
