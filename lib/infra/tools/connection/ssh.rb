@@ -58,60 +58,39 @@ module Infra::Tools::Connection
       def exec(command, loud=false, &block)
         self.logger.info("executing command: #{command}")
 
-        self.contexts.each.with_index do |i, context|
-          self.logger.info("#{i}\t#{context.description}")
+        self.logger.info("with contexts:") if self.contexts.any?
+        self.contexts.each.with_index do |context, i|
+          self.logger.info("(#{i})\t#{context.description}")
         end
 
         # TODO: find some way to StringIO data into the user-provided block,
         # so that it can match the open3 signature
         prepped = Context.apply(command)
-        status = nil
+        session = nil
         Net::SSH.start(parent.ipv4, parent.username, keys: [parent.key_file]) do |ssh|
           channel = ssh.open_channel do |ch|
             ch.exec(prepped) do |ch, success|
               raise "could not start command" unless success
 
-              stdout_read, stdout_write = IO.pipe
-              stderr_read, stderr_write = IO.pipe
-              stdin = ChannelWriter.new(ch)
+              session = Session.new(channel, ch, logger)
 
-              ### state tracking ###
-              ch.on_request("exit-status") do |_, data|
-                status = data.read_long
-              end
+              yield(session.stdout, session.stderr, session.stdin, session) if block_given?
 
-              alive = true
-              ch.on_close do
-                self.logger.info("command finished")
-
-                stdout_write.close
-                stderr_write.close
-              end
-
-              ### io tracking ###
-              ch.on_data do |_, data|
-                stdout_write << data
-              end
-
-              ch.on_extended_data do |_, _, data|
-                stderr_write << data
-              end
-
-              yield(stdout_read, stderr_read, stdin, ch) if block_given?
+              session.close
             end
           end
 
           channel.wait
         end
 
-        (status == 0)
+        session.status
       end
 
       # execute a command and fail if it returns a non-normal result
       def exec!(command, loud=false, &block)
-        success = exec(command, loud, &block)
+        status = exec(command, loud, &block)
 
-        raise RemoteCommandError.new("command failed: #{command}") unless success
+        raise RemoteCommandError.new("command failed: #{command}") unless status == 0
         true
       end
 
@@ -121,8 +100,8 @@ module Infra::Tools::Connection
       # portion
       def eval(command, loud=false)
         result = ""
-        exec(command, loud) do |stdout, stderr, stdin, ch|
-          yield(stdout, stderr, stdin, ch) if block_given?
+        exec(command, loud) do |stdout, stderr, stdin, session|
+          yield(stdout, stderr, stdin, session) if block_given?
 
           Thread.new do
             until stdout.eof?
@@ -133,14 +112,61 @@ module Infra::Tools::Connection
         result
       end
 
-      class ChannelWriter < IO
-        attr_accessor :ch
-        def initialize ch
-          self.ch = ch
+      class Session
+        class ChannelWriter < IO
+          attr_accessor :ch
+          def initialize ch
+            self.ch = ch
+          end
+
+          def write(text="")
+            ch.send_data(text)
+          end
+
+          def eof!
+            ch.eof!
+          end
         end
 
-        def write text
-          ch.send_data(text)
+        attr_accessor :stdout, :stderr, :stdin
+        attr_accessor :status, :signal, :alive
+
+        def initialize channel, ch, logger
+          @channel = channel
+          @ch = ch
+
+          self.stdout, @stdout_w = IO.pipe
+          self.stderr, @stderr_w = IO.pipe
+          self.stdin = ChannelWriter.new(ch)
+
+          ### state tracking ###
+          ch.on_request("exit-status") do |_, data|
+            self.status = data.read_long
+          end
+
+          ch.on_close do
+            logger.info("command finished")
+
+            @stdout_w.close
+            @stderr_w.close
+          end
+
+          ### io tracking ###
+          ch.on_data do |_, data|
+            @stdout_w << data
+          end
+
+          ch.on_extended_data do |_, _, data|
+            @stderr_w << data
+          end
+        end
+
+        def wait
+          @channel.wait
+        end
+
+        def close
+          @ch.eof!
         end
       end
     end
