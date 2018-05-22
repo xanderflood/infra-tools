@@ -55,7 +55,7 @@ module Infra::Tools::Connection
       end
 
       # execute a command and return its return true/false success
-      def open3(command, loud=false)
+      def exec(command, loud=false, &block)
         self.logger.info("executing command: #{command}")
 
         self.contexts.each.with_index do |i, context|
@@ -64,35 +64,47 @@ module Infra::Tools::Connection
 
         # TODO: find some way to StringIO data into the user-provided block,
         # so that it can match the open3 signature
-        value = nil
         prepped = Context.apply(command)
-        channel = ssh.open_channel do |ch|
-          ch.exec prepped do |ch, success|
-            raise "could not start command" unless success
+        status = nil
+        Net::SSH.start(parent.ipv4, parent.username, keys: [parent.key_file]) do |ssh|
+          channel = ssh.open_channel do |ch|
+            ch.exec(prepped) do |ch, success|
+              raise "could not start command" unless success
 
-            channel.on_close do
-              self.logger.info("command finished")
+              stdout_read, stdout_write = IO.pipe
+              stderr_read, stderr_write = IO.pipe
+              stdin = ChannelWriter.new(ch)
+
+              ### state tracking ###
+              ch.on_request("exit-status") do |_, data|
+                status = data.read_long
+              end
+
+              alive = true
+              ch.on_close do
+                self.logger.info("command finished")
+
+                stdout_write.close
+                stderr_write.close
+              end
+
+              ### io tracking ###
+              ch.on_data do |_, data|
+                stdout_write << data
+              end
+
+              ch.on_extended_data do |_, _, data|
+                stderr_write << data
+              end
+
+              yield(stdout_read, stderr_read, stdin, ch) if block_given?
             end
-
-            session = Session.new(ch)
-
-            # user-provided block can call the
-            # following methods on the session:
-            # (1) outline - read stdout until \n or EOF
-            # (2) errline - read stderr until \n or EOF
-            #  ^-- these return nil when the process is finished and no more data remains
-            # (3) write   - write to stdin
-            # (4) wait    - block until process exits
-            # (5) value   - return exit status
-            # (5) signal  - return exit signal
-            yield session
-
-            session.wait
-            value = session.value
           end
+
+          channel.wait
         end
 
-        (value == 0)
+        (status == 0)
       end
 
       # execute a command and fail if it returns a non-normal result
@@ -108,80 +120,27 @@ module Infra::Tools::Connection
       # this method will only return the unread
       # portion
       def eval(command, loud=false)
-        result = nil
-        exec(command, loud) do |session|
-          yield session if block_given?
+        result = ""
+        exec(command, loud) do |stdout, stderr, stdin, ch|
+          yield(stdout, stderr, stdin, ch) if block_given?
 
-          result += data while (data = session.readline)
+          Thread.new do
+            until stdout.eof?
+              result += stdout.readline
+            end
+          end
         end
         result
       end
 
-      class Session
-        attr_accessor :channel
-        attr_accessor :stdout_buffer, :stderr_buffer, :fresh
-        attr_accessor :alive, :status, :signal
-
-        def initialize channel
-          self.channel = channel
-
-          self.stdout_buffer = ""
-          channel.on_data do |_, data|
-            self.stdout_buffer += data
-            self.fresh = true
-          end
-
-          self.stderr_buffer = ""
-          channel.on_extended_data do |ch,type,data|
-            self.stderr_buffer += data
-            self.fresh = true
-          end
-
-          channel.on_request("exit-status") do |_,data|
-            self.status = data.read_long
-          end
-
-          channel.on_request("exit-signal") do |_, data|
-            self.signal = data.read_long
-          end
-
-          self.alive = true
-          channel.on_close do
-            self.alive = false
-          end
+      class ChannelWriter < IO
+        attr_accessor :ch
+        def initialize ch
+          self.ch = ch
         end
 
-        def write string
-          self.channel.send_data string
-          nil
-        end
-
-        def wait
-          while self.alive; end
-        end
-
-        def self.outline; readline(:stdout); end
-        def self.errline; readline(:stderr); end
-
-        def self.readline(buffer_name)
-          var_sym = :"#{buffer_name}_buffer"
-          buffer = self.send(var_sym)
-
-          if !buffer.include? "\n"
-            until !self.alive && self.fresh && buffer.include?("\n")
-              self.fresh = false
-            end
-          end
-
-          if !self.alive && buffer.empty?
-            return nil
-          end
-
-          io = StringIO.new(buffer)
-          line = io.readline
-          self.send(:"#{var_sym}=", io.read)
-
-          line
+        def write text
+          ch.send_data(text)
         end
       end
     end
