@@ -139,7 +139,7 @@ module Infra::Tools::Connection
     class Bundled < Base
       def self.[]; self.new(); end
 
-      def format command; "bundle exec #{command}"; end
+      def format command; "bundle exec bash -c #{escape(command)}"; end
 
       def description
         "bundled"
@@ -150,20 +150,29 @@ module Infra::Tools::Connection
     class RVM < Base
       attr_accessor :rvm_path, :ruby, :gemset
 
-      RVM_PATH = "/usr/share/rvm/bin/rvm"
+      RVM_PATH = "~/rvm/scripts/rvm"
 
       def self.[](params={}); self.new(params); end
 
+      def mode
+        [self.ruby, self.gemset].compact.join("@")
+      end
+
+      def description
+        "rvm #{self.mode}"
+      end
+
       def prepare
         self.rvm_path ||= RVM_PATH
-        self.ruby     ||= "`cat .ruby-version | sed -e 's/^ *//g;s/ *$//g;/^$/d'`"
-        self.gemset   ||= "`cat .ruby-gemset | sed -e 's/^ *//g;s/ *$//g;/^$/d'`"
+        self.ruby = "`cat .ruby-version | sed -e 's/^ *//g;s/ *$//g;/^$/d'`" if self.ruby == :auto
+        self.gemset = "`cat .ruby-gemset | sed -e 's/^ *//g;s/ *$//g;/^$/d'`" if self.gemset == :auto
       end
 
       def format command
         prepare
 
-        "#{rvm_path} #{ruby}@#{gemset} do #{command}"
+        command = "bash -c #{escape(command)}" if self.ruby || self.gemset
+        [rvm_path, mode, "do", command].compact.join(" ")
       end
     end
 
@@ -183,3 +192,5 @@ module Infra::Tools::Connection
     end
   end
 end
+
+ITCContext = Infra::Tools::Connection::Context
