@@ -51,7 +51,7 @@ module Infra::Tools::Connection
         dsl.contexts = self.contexts + contexts
 
         yield(dsl)
-        nil
+        dsl
       end
 
       # execute a command and return its return true/false success
@@ -63,9 +63,8 @@ module Infra::Tools::Connection
           self.logger.info("(#{i})\t#{context.description}")
         end
 
-        # TODO: find some way to StringIO data into the user-provided block,
-        # so that it can match the open3 signature
-        prepped = Context.apply(command)
+        prepped = Context.apply(command, *self.contexts)
+
         session = nil
         Net::SSH.start(parent.ipv4, parent.username, keys: [parent.key_file]) do |ssh|
           channel = ssh.open_channel do |ch|
@@ -88,9 +87,19 @@ module Infra::Tools::Connection
 
       # execute a command and fail if it returns a non-normal result
       def exec!(command, loud=false, &block)
-        status = exec(command, loud, &block)
+        result = ""
+        status = exec(command, loud) do |stdout, stderr, stdin, session|
+          yield if block_given?
 
-        raise RemoteCommandError.new("command failed: #{command}") unless status == 0
+          Thread.new do
+            result = stderr.read
+          end
+        end
+
+        if status != 0
+          warn result
+          raise RemoteCommandError.new("command failed: #{command}") unless status == 0
+        end
         true
       end
 
@@ -104,9 +113,7 @@ module Infra::Tools::Connection
           yield(stdout, stderr, stdin, session) if block_given?
 
           Thread.new do
-            until stdout.eof?
-              result += stdout.readline
-            end
+            result = stdout.read
           end
         end
         result
@@ -142,11 +149,15 @@ module Infra::Tools::Connection
           ### state tracking ###
           ch.on_request("exit-status") do |_, data|
             self.status = data.read_long
+
+            if self.status == 0
+              logger.info("command finished")
+            else
+              logger.info("command failed")
+            end
           end
 
           ch.on_close do
-            logger.info("command finished")
-
             @stdout_w.close
             @stderr_w.close
           end
