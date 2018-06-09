@@ -9,3 +9,5 @@ gem 'aws-sdk', '~> 3'
 
 gem 'net-ssh'
 gem 'net-scp'
+
+gem 'openssl'
