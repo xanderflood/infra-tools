@@ -1,6 +1,8 @@
 require 'fileutils'
+require 'aws-sdk-ec2'
 require 'aws-sdk-s3'
 require 'openssl'
+require 'pathname'
 
 module Infra::Tools
   class Key
@@ -9,8 +11,10 @@ module Infra::Tools
 
     attr_reader :labels, :name
 
-    def self.find(*labels)
-      self.query.find{ |kp| kp.key_name == File.join(*labels) }
+    def self.all
+      @@all ||= self.query.map do |key|
+        self.from_ec2(key)
+      end
     end
 
     def initialize *labels
@@ -57,7 +61,8 @@ module Infra::Tools
 
       self.class.ec2.import_key_pair(
         key_name: name,
-        public_key_material: base64)
+        public_key_material: base64
+      )
 
       cache_local(pub, key)
       cache_to_s3(pub, key)
@@ -71,16 +76,26 @@ module Infra::Tools
     # stop
 
     private
+    def self.find(*labels)
+      self.query.find{ |kp| kp.key_name == File.join(*labels) }
+    end
+
+    def self.from_ec2(ec2_obj)
+      self.new(Pathname(ec2_obj.key_name).each_filename.map(&:itself))
+    end
+
     def cache_to_s3(pub, key)
       s3 = Aws::S3::Client.new
       s3.put_object(
         bucket: BUCKET,
         key:    s3_key('pub'),
-        body:   pub)
+        body:   pub
+      )
       s3.put_object(
         bucket: BUCKET,
         key:    s3_key('key'),
-        body:   key)
+        body:   key
+      )
 
       # TODO: server-side encryption
       nil
@@ -90,10 +105,10 @@ module Infra::Tools
       s3 = Aws::S3::Client.new
       pub_response = s3.get_object(
         bucket: BUCKET,
-        key:    s3_key('pub'))
+      key:    s3_key('pub'))
       prv_response = s3.get_object(
         bucket: BUCKET,
-        key:    s3_key('key'))
+      key:    s3_key('key'))
 
       return pub_response.body.string, prv_response.body.string
     end
