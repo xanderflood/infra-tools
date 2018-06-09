@@ -8,6 +8,6 @@ module Infra
   end
 end
 
-%w(key instance template pieces service connection).each do |name|
+%w(key instance template pieces service connection ip_address).each do |name|
   require_relative "tools/#{name}"
 end
